@@ -1,10 +1,13 @@
 package ada.tech.tenthirty.tvpackages.application.service;
 
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.util.UriComponentsBuilder;
 
@@ -12,31 +15,41 @@ import java.util.List;
 import java.util.Map;
 
 @Service
+@Configuration
 public class HttpPayment {
-  private final RestTemplate restTemplate;
+  private String URL; 
 
-  public HttpPayment() {
-    this.restTemplate = new RestTemplate();
+  @Bean
+  WebClient webClient(){
+      return WebClient.builder().baseUrl(URL)
+              .build();
   }
 
-  public boolean getPaymentStatus(String idUser) {
-    String URL = UriComponentsBuilder.fromHttpUrl("http://localhost:3001")
-            .path("payment/"+ idUser)
-            .toUriString();
+  public Boolean getPaymentStatus(String idUser) {
+    URL = "http://localhost:3001/";
 
     try {
-      ResponseEntity<List<Map<String, String>>> response = restTemplate.exchange(
-              URL,
-              HttpMethod.GET,
-              null,
-              new ParameterizedTypeReference<List<Map<String, String>>>(){});
+      WebClient webClient = webClient();
+    
+      List<Map<String, String>> paymentList = webClient.get()
+              .uri(uriBuilder -> uriBuilder.path("/payment").build(idUser))
+              .retrieve()
+              .onStatus(
+                      status -> !status.is2xxSuccessful(),
+                      response -> {
+                          throw new ResponseStatusException(response.statusCode(), "Error retrieving promotions");
+                      }
+              )
+              .bodyToFlux(new ParameterizedTypeReference<List<Map<String, String>>>() {}).blockFirst();
 
-      if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-        return response.getBody().isEmpty();
+      if (paymentList != null) {
+          return paymentList.isEmpty();
+      } else {
+          System.out.println("Error: Promotion is null");
       }
     } catch (ResponseStatusException ex) {
       throw new ResponseStatusException(ex.getStatusCode(), ex.getMessage());
     }
-    return false;
+    return null;
   }
 }
